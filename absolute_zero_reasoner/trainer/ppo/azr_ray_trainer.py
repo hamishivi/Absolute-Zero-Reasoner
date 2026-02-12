@@ -462,39 +462,39 @@ class DatasetManager:
         if name == 'input':
             with self.locks['input'], self.locks['input_steps']:
                 before_length = len(self.datasets['input'])
-                self.datasets['input'] = self.datasets['input'][:max_length]
-                self.datasets['input_steps'] = self.datasets['input_steps'][:max_length]
+                self.datasets['input'] = self.datasets['input'][-max_length:]
+                self.datasets['input_steps'] = self.datasets['input_steps'][-max_length:]
                 truncated_length = before_length - len(self.datasets['input'])
                 return truncated_length, before_length
         elif name == 'output':
             with self.locks['output'], self.locks['output_steps']:
                 before_length = len(self.datasets['output'])
-                self.datasets['output'] = self.datasets['output'][:max_length]
-                self.datasets['output_steps'] = self.datasets['output_steps'][:max_length]
+                self.datasets['output'] = self.datasets['output'][-max_length:]
+                self.datasets['output_steps'] = self.datasets['output_steps'][-max_length:]
                 truncated_length = before_length - len(self.datasets['output'])
                 return truncated_length, before_length
         elif name == 'seed':
             with self.locks['seed']:
                 before_length = len(self.datasets['seed'])
-                self.datasets['seed'] = self.datasets['seed'][:max_length]
+                self.datasets['seed'] = self.datasets['seed'][-max_length:]
                 truncated_length = before_length - len(self.datasets['seed'])
                 return truncated_length, before_length
         elif name == 'error':
             with self.locks['error']:
                 before_length = len(self.datasets['error'])
-                self.datasets['error'] = self.datasets['error'][:max_length]
+                self.datasets['error'] = self.datasets['error'][-max_length:]
                 truncated_length = before_length - len(self.datasets['error'])
                 return truncated_length, before_length
         elif name == 'error_seed':
             with self.locks['error_seed']:
                 before_length = len(self.datasets['error_seed'])
-                self.datasets['error_seed'] = self.datasets['error_seed'][:max_length]
+                self.datasets['error_seed'] = self.datasets['error_seed'][-max_length:]
                 truncated_length = before_length - len(self.datasets['error_seed'])
                 return truncated_length, before_length
         elif name == 'problem':
             with self.locks['problem']:
                 before_length = len(self.datasets['problem'])
-                self.datasets['problem'] = self.datasets['problem'][:max_length]
+                self.datasets['problem'] = self.datasets['problem'][-max_length:]
                 truncated_length = before_length - len(self.datasets['problem'])
                 return truncated_length, before_length
         else:
