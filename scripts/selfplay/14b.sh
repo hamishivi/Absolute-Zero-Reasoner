@@ -10,7 +10,7 @@ OUTPUT_SEED_PATH=${OUTPUT_SEED_PATH:-data/14b_seed_io.jsonl}
 OUTPUT_ERROR_SEED_PATH=${OUTPUT_ERROR_SEED_PATH:-data/14b_error_seed_io.jsonl}
 OUTPUT_CODE_F_SEED_PATH=${OUTPUT_CODE_F_SEED_PATH:-data/14b_code_f_seed_io.jsonl}
 
-python -m absolute_zero_reasoner.main_azr_ppo \
+uv run python -m absolute_zero_reasoner.main_azr_ppo \
     data.shuffle=True \
     actor_rollout_ref.ref.include_ref=False \
     algorithm.adv_estimator=reinforce_plus_plus \
@@ -90,7 +90,7 @@ python -m absolute_zero_reasoner.main_azr_ppo \
     azr.pred_data_mix_strategy=max_new \
     azr.data_selection_strategy.seed_batch_factor=4 \
     azr.data_selection_strategy.valid_program_filter=all \
-    azr.data_selection_strategy.max_programs=16384 \
+    azr.data_selection_strategy.max_programs=100000 \
     azr.data_selection_strategy.batched_estimate=False \
     azr.reward.generation_reward_config.intrinsic_combine_method=sum \
     azr.gen_data_probabilities_strategy=uniform \

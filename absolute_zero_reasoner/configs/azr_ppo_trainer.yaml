@@ -500,6 +500,8 @@ azr:
   ast_check: True
   execute_max_timeout: 10 # seconds
   random_print_max_programs: 3
+  record_programs: True
+  record_programs_path: null  # defaults to {default_local_dir}/program_records/
   train_propose: True
   use_china_mirror: True # used for sandboxfusion executor for people in China
   data_selection_strategy:
@@ -509,7 +511,8 @@ azr:
     seed_batch_factor: 4
     content_max_length: 8096
     valid_program_filter: all # [all (all valids), non_one (all valids except 100% accuracy), non_extremes (all valids except 0% and 100% accuracy)]
-    max_programs: null
+    max_programs: 100000
+    shuffle_buffer: True
     batched_estimate: False
     composite_function_n_min: -1
     composite_function_n_max: -1

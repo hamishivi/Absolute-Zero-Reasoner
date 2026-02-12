@@ -581,6 +581,21 @@ class DatasetManager:
         with self.locks[counter_type]:
             self.type_counters[counter_type][element_type][element] += 1
 
+    def shuffle_dataset(self, name: str):
+        """Shuffle dataset entries to randomize eviction on truncation."""
+        data_key = name
+        steps_key = f"{name}_steps"
+        # Datasets without parallel steps lists
+        if name in ('seed', 'error_seed'):
+            with self.locks[data_key]:
+                random.shuffle(self.datasets[data_key])
+            return
+        with self.locks[data_key], self.locks[steps_key]:
+            combined = list(zip(self.datasets[data_key], self.datasets[steps_key]))
+            random.shuffle(combined)
+            if combined:
+                self.datasets[data_key], self.datasets[steps_key] = [list(x) for x in zip(*combined)]
+
 
 class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
     _supported_tasks = {'code_i', 'code_o', 'code_e', 'code_f'}
@@ -921,6 +936,28 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
                 avg_program_lines = sum(len(program['snippet'].split('\n')) for program in valid_programs) / len(valid_programs) if valid_programs else 0
                 train_metrics[f'{problem_type}/avg_program_lines'] = avg_program_lines
 
+            # Record programs to disk
+            if self.config.azr.get('record_programs', False):
+                record_dir = Path(self.config.azr.get('record_programs_path') or
+                                  Path(self.config.trainer.default_local_dir) / 'program_records')
+                record_dir.mkdir(parents=True, exist_ok=True)
+                record_file = record_dir / f'{problem_type}.jsonl'
+                with open(record_file, 'a') as f:
+                    for program in valid_programs:
+                        record = {
+                            'step': self.global_steps,
+                            'problem_type': problem_type,
+                            'program': program,
+                        }
+                        f.write(json.dumps(record, default=str) + '\n')
+                    for pred in correct_predictions:
+                        record = {
+                            'step': self.global_steps,
+                            'problem_type': problem_type,
+                            'prediction': pred,
+                        }
+                        f.write(json.dumps(record, default=str) + '\n')
+
             # Log new programs if available
             if valid_programs and self.config.azr.random_print_max_programs > 0:
                 PrettyPrinter.section_header(f"New {problem_type} Programs")
@@ -964,21 +1001,27 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
 
             if problem_type.endswith('code_i'):
                 if valid_programs:
-                    # Process locally first
                     processed_programs = process_elements(valid_programs)
-                    # Then batch add to dataset
+                    if self.config.azr.data_selection_strategy.get('shuffle_buffer', False):
+                        ray.get(self.dataset_manager.shuffle_dataset.remote('input'))
                     ray.get(self.dataset_manager.add_input_batch.remote(processed_programs, self.global_steps))
             elif problem_type.endswith('code_o'):
                 if valid_programs:
                     processed_programs = process_elements(valid_programs)
+                    if self.config.azr.data_selection_strategy.get('shuffle_buffer', False):
+                        ray.get(self.dataset_manager.shuffle_dataset.remote('output'))
                     ray.get(self.dataset_manager.add_output_batch.remote(processed_programs, self.global_steps))
             elif problem_type.endswith('code_e'):
                 if valid_programs:
                     processed_programs = process_elements(valid_programs)
+                    if self.config.azr.data_selection_strategy.get('shuffle_buffer', False):
+                        ray.get(self.dataset_manager.shuffle_dataset.remote('error'))
                     ray.get(self.dataset_manager.add_error_batch.remote(processed_programs, self.global_steps))
             elif problem_type.endswith('code_f'):
                 if valid_programs:
                     processed_programs = process_elements(valid_programs)
+                    if self.config.azr.data_selection_strategy.get('shuffle_buffer', False):
+                        ray.get(self.dataset_manager.shuffle_dataset.remote('problem'))
                     ray.get(self.dataset_manager.add_problem_batch.remote(processed_programs, self.global_steps))
             else:
                 raise ValueError(f'Invalid problem type: {problem_type}')
