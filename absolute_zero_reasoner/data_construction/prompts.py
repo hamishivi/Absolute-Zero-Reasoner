@@ -326,6 +326,27 @@ Name your entry function `f()`!!!
 
 # composite_requirements_prompt = "\n[IMPORTANT CRITERIA!!!] The main function `f` MUST make calls to ALL these functions {function_names} in its body, and you SHOULD NOT provide the definition of {function_names} in your output code snippet. You should first reason step by step about what these functions, {function_names}, do, then write the code snippet.\n" + '\n### The Functions that Must ALL be Called in your Code Snippet: \n```python\n{composite_functions}\n```\n'
 
+diversity_judge_prompt = """You are judging a new Python program compared to existing programs.
+
+### Existing Programs:
+{existing_programs}
+
+### New Program:
+```python
+{new_program}
+```
+
+Rate the new program on two criteria:
+1. DIVERSITY (0-5): How different is this program from the existing ones? Consider algorithms, data structures, computational patterns, and problem domain.
+   0 = identical/trivial variation, 5 = completely different concept
+2. INTERESTING (0-5): How creative and challenging is this program? Consider algorithmic novelty, complexity, and cleverness.
+   0 = trivial, 5 = very creative and challenging
+
+Answer in EXACTLY this format:
+diversity: <0-5>
+interesting: <0-5>
+"""
+
 composite_requirements_prompt = "\n[IMPORTANT CRITERIA!!!] The main function `f` MUST make calls to ALL these functions {function_names} in its body, and you SHOULD NOT provide the definition of {function_names} in your output code snippet. The function `f` should build on top of {function_names} with extra functionalities, not just a simple wrapper. You should first reason step by step about what these functions, {function_names}, do, then write the code snippet.\n" + '\n### The Functions that Must ALL be Called in your Code Snippet: \n```python\n{composite_functions}\n```\n'
 
 remove_input_from_snippet_prompt = "- Do not have the test input anywhere in the code snippet, provide it in the input section."

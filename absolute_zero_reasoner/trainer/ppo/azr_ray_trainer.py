@@ -410,6 +410,13 @@ class DatasetManager:
                 snippets.append({'snippet': d['snippet'], 'original_snippet': d['original_snippet'], 'imports': d['imports']})
             return list(snippets)
 
+    def sample_snippets(self, n: int) -> List[Dict]:
+        """Randomly sample n snippet dicts from the buffer for diversity comparison."""
+        all_snippets = self.get_snippets()
+        if len(all_snippets) <= n:
+            return all_snippets
+        return random.sample(all_snippets, n)
+
     def get_snippets_with_steps(self) -> List[Tuple[Dict, int]]:
         snippets = self.get_snippets()
         return list(zip(snippets, self.datasets['input_steps'] + self.datasets['output_steps']))
@@ -910,6 +917,12 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
 
             # make sure actor_rollout_wg n > 1
             if problem_type.startswith('gen'):
+                # Sample buffer snippets for LM diversity reward (only for non-code_f gen tasks)
+                buffer_snippets = None
+                if 'code_f' not in problem_type and self.config.azr.reward.generation_reward_config.lm_diversity_reward.enabled:
+                    n_buffer_samples = self.config.azr.reward.generation_reward_config.lm_diversity_reward.n_buffer_samples
+                    buffer_snippets = ray.get(self.dataset_manager.sample_snippets.remote(n_buffer_samples))
+
                 reward_fn_kwargs = {
                     'data': batch,
                     'problem_type': problem_type,
@@ -920,6 +933,7 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
                     'input_type_counters': input_type_counters,
                     'output_type_counters': output_type_counters,
                     'error_type_counters': error_type_counters,
+                    'buffer_snippets': buffer_snippets,
                 }
             elif problem_type.startswith('pred'):
                 reward_fn_kwargs = {

@@ -28,6 +28,7 @@ from absolute_zero_reasoner.rewards.code_reward import (
 from absolute_zero_reasoner.rewards.custom_evaluate import get_format_reward, extract_answer, extract_thought
 from absolute_zero_reasoner.data_construction.process_data import boxed_instruction, instruction_following
 from absolute_zero_reasoner.data_construction.constructor import get_code_problem_predictor_prompt
+from absolute_zero_reasoner.data_construction.prompts import diversity_judge_prompt
 from absolute_zero_reasoner.utils.dataset.rl_dataset import RLHFDataset
 from absolute_zero_reasoner.utils.logging_utils.stdout import PrettyPrinter
 from absolute_zero_reasoner.utils.code_utils.checks import check_composite_function, check_no_definitions
@@ -348,6 +349,7 @@ class CodeIORewardManager():
         input_type_counters: Dict[str, Dict[str, int]] = None,
         output_type_counters: Dict[str, Dict[str, int]] = None,
         error_type_counters: Dict[str, Dict[str, int]] = None,
+        buffer_snippets: List[Dict] = None,
     ) -> Tuple[torch.Tensor, Dict, List[Dict], List[Dict]]:
         """We will expand this function gradually based on the available datasets"""
 
@@ -383,6 +385,7 @@ class CodeIORewardManager():
                 input_type_counters=input_type_counters,
                 output_type_counters=output_type_counters,
                 error_type_counters=error_type_counters,
+                buffer_snippets=buffer_snippets,
             )
             PrettyPrinter.section_header("Combining Rewards for Generation Tasks")
             for i in range(len(data_dicts)):
@@ -428,6 +431,9 @@ class CodeIORewardManager():
                             if self.generation_reward_config.answer_diversity_reward.enabled:
                                 intrinsic_reward_components.append(min(self.generation_reward_config.answer_diversity_reward.coef * rewards[uid]['type_counts'],
                                     self.generation_reward_config.answer_diversity_reward.max))
+                            if self.generation_reward_config.lm_diversity_reward.enabled:
+                                intrinsic_reward_components.append(min(self.generation_reward_config.lm_diversity_reward.coef * rewards[uid]['lm_diversity'],
+                                    self.generation_reward_config.lm_diversity_reward.max))
 
                         final_reward = _combine_rewards(acc_reward, intrinsic_reward_components, self.generation_reward_config.intrinsic_combine_method)
                         reward_tensor[i, valid_response_length - 1] = final_reward
@@ -442,6 +448,7 @@ class CodeIORewardManager():
                 all_scores['complexity'] = [rewards[uid]['complexity'] for uid in rewards]
                 all_scores['mean_edit_distance'] = [rewards[uid]['mean_edit_distance'] for uid in rewards]
                 all_scores['halstead'] = [rewards[uid]['halstead'] for uid in rewards]
+                all_scores['lm_diversity'] = [rewards[uid]['lm_diversity'] for uid in rewards]
             else:
                 all_scores['input_answer_diversity'] = [rewards[uid]['input_type_counts'] for uid in rewards]
                 all_scores['output_answer_diversity'] = [rewards[uid]['output_type_counts'] for uid in rewards]
@@ -529,6 +536,130 @@ class CodeIORewardManager():
             all_scores['none_ratio'] = all_scores['none_count'] / len(data)
         return reward_tensor, all_scores, valid_programs, correct_predictions
 
+    def _get_lm_diversity_rewards(
+        self,
+        valid_data_dicts: List[Dict],
+        buffer_snippets: List[Dict],
+        rollout_actor_wg,
+        code_key: str = 'snippet',
+    ) -> Dict[str, float]:
+        """Use the LM to judge diversity and interestingness of generated programs.
+
+        For each valid program, builds a prompt showing buffer samples and the new program,
+        then batches all prompts and calls rollout_actor_wg.generate_sequences() once.
+        Parses responses for diversity (0-5) and interesting (0-5).
+        Reward logic: if diversity >= 4, reward = interesting / 5.0; else reward = 0.0.
+
+        Returns:
+            Dict mapping uid -> lm_diversity score.
+        """
+        from absolute_zero_reasoner.data_construction.process_data import instruction_following, boxed_instruction
+
+        if self.reward_fn_extraction_type.startswith('boxed'):
+            instruction_template = boxed_instruction
+        elif self.reward_fn_extraction_type.startswith('answer'):
+            instruction_template = instruction_following
+        elif self.reward_fn_extraction_type.startswith('none'):
+            instruction_template = '{}'
+        else:
+            instruction_template = '{}'
+
+        # Build existing programs string from buffer snippets
+        existing_programs_str = ""
+        for i, snippet in enumerate(buffer_snippets):
+            existing_programs_str += f"<program_{i}>\n```python\n{snippet['snippet']}\n```\n</program_{i}>\n"
+
+        # Build prompts for each valid program
+        prompts = []
+        valid_uids = []
+        for data_dict in valid_data_dicts:
+            if 'answer' not in data_dict:
+                continue
+            new_program = data_dict['answer'].get(code_key, data_dict['answer'].get('snippet', ''))
+            prompt_text = diversity_judge_prompt.format(
+                existing_programs=existing_programs_str,
+                new_program=new_program,
+            )
+            prompt_text = instruction_template.format(prompt_text)
+            prompts.append({
+                'prompt': [{'role': 'user', 'content': prompt_text}],
+                'uid': data_dict['uid'],
+                'data_source': data_dict['data_source'],
+                'ground_truth': '',
+                'extra_info': data_dict['extra_info'],
+            })
+            valid_uids.append(data_dict['uid'])
+
+        if not prompts:
+            return {}
+
+        # Create dataset and generate
+        pd.DataFrame(prompts).to_parquet(f'{self.output_path}/temp_diversity.parquet')
+        temp_data = RLHFDataset(
+            parquet_files=f'{self.output_path}/temp_diversity.parquet',
+            tokenizer=self.tokenizer,
+            prompt_key='prompt',
+            max_prompt_length=self.max_prompt_length,
+            filter_prompts=True,
+            return_raw_chat=False,
+            truncation='error'
+        )
+        os.remove(f'{self.output_path}/temp_diversity.parquet')
+        sampler = torch.utils.data.SequentialSampler(data_source=temp_data)
+        dataloader = torch.utils.data.DataLoader(
+            dataset=temp_data,
+            batch_size=len(temp_data),
+            drop_last=False,
+            shuffle=False,
+            collate_fn=collate_fn,
+            sampler=sampler,
+        )
+        assert len(dataloader) == 1
+        data = next(iter(dataloader))
+        batch = DataProto.from_single_dict(data)
+        gen_batch = batch.pop(['input_ids', 'attention_mask', 'position_ids'])
+        gen_batch.meta_info = {
+            'eos_token_id': self.tokenizer.eos_token_id,
+            'pad_token_id': self.tokenizer.pad_token_id,
+            'recompute_log_prob': False,
+            'do_sample': True,
+            'validate': False,
+        }
+        gen_batch_padded, pad_size = pad_dataproto_to_divisor(gen_batch, rollout_actor_wg.world_size)
+        output_gen_batch_padded = rollout_actor_wg.generate_sequences(gen_batch_padded)
+        output_gen_batch = unpad_dataproto(output_gen_batch_padded, pad_size=pad_size)
+
+        batch = batch.union(output_gen_batch)
+
+        # Parse responses
+        diversity_pattern = re.compile(r'diversity:\s*(\d)', re.IGNORECASE)
+        interesting_pattern = re.compile(r'interesting:\s*(\d)', re.IGNORECASE)
+
+        lm_diversity_scores = {}
+        for b in batch:
+            uid = b.non_tensor_batch['uid']
+            response_text = self.tokenizer.decode(b.batch['responses'], skip_special_tokens=True)
+
+            diversity_score = 0
+            interesting_score = 0
+            try:
+                d_match = diversity_pattern.search(response_text)
+                i_match = interesting_pattern.search(response_text)
+                if d_match:
+                    diversity_score = min(int(d_match.group(1)), 5)
+                if i_match:
+                    interesting_score = min(int(i_match.group(1)), 5)
+            except (ValueError, AttributeError):
+                pass
+
+            # Reward logic: only award interestingness if diversity is high
+            if diversity_score >= 4:
+                lm_diversity_scores[uid] = interesting_score / 5.0
+            else:
+                lm_diversity_scores[uid] = 0.0
+
+        return lm_diversity_scores
+
     def _get_problem_generator_rewards_and_valid_programs(
         self,
         data_dicts: List[Dict],
@@ -539,6 +670,7 @@ class CodeIORewardManager():
         input_type_counters: Dict[str, Dict[str, int]] = None,
         output_type_counters: Dict[str, Dict[str, int]] = None,
         error_type_counters: Dict[str, Dict[str, int]] = None,
+        buffer_snippets: List[Dict] = None,
     ) -> Tuple[Dict[str, Dict[str, float]], List[Dict[str, str]]]:
         """This function uses samples to estimate the accuracy reward for each program, also computes the code complexity and mean edit distance of generated programs.
             Also returns the valid programs using filters.
@@ -846,6 +978,21 @@ class CodeIORewardManager():
                     type_counters,
                     hierarchical=self.generation_reward_config.answer_diversity_reward.hierarchical
                 ) if 'answer' in data_dict else 0.0
+            # LM-based diversity reward
+            if self.generation_reward_config.lm_diversity_reward.enabled and buffer_snippets and len(valid_data_dicts) > 0:
+                PrettyPrinter.section_header("Computing LM Diversity Rewards")
+                lm_diversity_scores = self._get_lm_diversity_rewards(
+                    valid_data_dicts=valid_data_dicts,
+                    buffer_snippets=buffer_snippets,
+                    rollout_actor_wg=rollout_actor_wg,
+                    code_key=code_key,
+                )
+                for data_dict in data_dicts:
+                    uid = data_dict['uid']
+                    rewards[uid]['lm_diversity'] = lm_diversity_scores.get(uid, 0.0)
+            else:
+                for data_dict in data_dicts:
+                    rewards[data_dict['uid']]['lm_diversity'] = 0.0
             if self.debug:
                 for data_dict in data_dicts:
                     if 'answer' in data_dict:

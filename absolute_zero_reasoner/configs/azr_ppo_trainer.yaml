@@ -598,3 +598,8 @@ azr:
         coef: 0.0
         max: 0.5
         hierarchical: False
+      lm_diversity_reward:
+        enabled: False
+        coef: 1.0
+        max: 1.0
+        n_buffer_samples: 5

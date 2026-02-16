@@ -49,7 +49,7 @@ uv run python -m absolute_zero_reasoner.main_azr_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='azr' \
-    trainer.experiment_name='azr_7b' \
+    trainer.experiment_name='azr_7b_trunc_fix' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=10 \
@@ -87,6 +87,10 @@ uv run python -m absolute_zero_reasoner.main_azr_ppo \
     azr.reward.generation_reward_config.answer_diversity_reward.max=0.0 \
     azr.reward.generation_reward_config.answer_diversity_reward.enabled=False \
     azr.reward.generation_reward_config.answer_diversity_reward.hierarchical=False \
+    azr.reward.generation_reward_config.lm_diversity_reward.enabled=True \
+    azr.reward.generation_reward_config.lm_diversity_reward.coef=1.0 \
+    azr.reward.generation_reward_config.lm_diversity_reward.max=1.0 \
+    azr.reward.generation_reward_config.lm_diversity_reward.n_buffer_samples=5 \
     azr.pred_data_mix_strategy=max_new \
     azr.data_selection_strategy.seed_batch_factor=4 \
     azr.data_selection_strategy.valid_program_filter=all \
