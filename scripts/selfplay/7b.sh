@@ -49,7 +49,7 @@ uv run python -m absolute_zero_reasoner.main_azr_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='azr' \
-    trainer.experiment_name='azr_7b_trunc_fix' \
+    trainer.experiment_name='azr_7b_lm_diversity' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=10 \
