@@ -364,6 +364,17 @@ algorithm:
     horizon: 10000
     target_kl: 0.0
 
+  # Entropic (risk-seeking) objective: reweight advantages within each UID group
+  # using softmax weights exp(beta * R) to upweight high-reward samples.
+  # See TTT-Discover (arXiv 2601.16175) for details.
+  entropic_objective:
+    enabled: False
+    beta: 1.0              # Temperature. Higher = more risk-seeking
+    adaptive: False         # Whether to adapt beta via KL constraint
+    target_gamma: 1.0       # Target KL divergence for adaptive beta
+    beta_min: 0.01          # Min beta for adaptive search
+    beta_max: 100.0         # Max beta for adaptive search
+
   # Whether to enable preference feedback PPO
   use_pf_ppo: False
 

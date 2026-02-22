@@ -7,6 +7,7 @@ import json
 from collections import defaultdict
 import threading
 import gc
+import math
 import os
 import pickle
 import ast
@@ -46,6 +47,82 @@ seed_program = """def f(a):
 
 def create_default_dict():
     return defaultdict(int)
+
+
+def _find_adaptive_beta(group_rewards, target_gamma, beta_min, beta_max, n_iter=20):
+    """Binary search for beta that satisfies KL[q_beta || uniform] = target_gamma."""
+    for _ in range(n_iter):
+        beta_mid = (beta_min + beta_max) / 2
+        w = torch.softmax(beta_mid * group_rewards, dim=0)
+        n = len(group_rewards)
+        kl = torch.sum(w * (torch.log(w + 1e-10) - math.log(1.0 / n)))
+        if kl < target_gamma:
+            beta_min = beta_mid
+        else:
+            beta_max = beta_mid
+    return (beta_min + beta_max) / 2
+
+
+def apply_entropic_reweighting(batch, config):
+    """Reweight advantages using entropic (risk-seeking) objective.
+
+    Within each UID group, computes softmax weights w_i = exp(beta * R_i) / sum(exp(beta * R_j))
+    and scales advantages by w_i * group_size (so mean weight = 1, preserving scale).
+    With large beta, only the best sample in a group drives the gradient, making the
+    objective risk-seeking and preserving novel-but-risky algorithmic patterns.
+    """
+    if not config.enabled:
+        return batch, {}
+
+    rewards = batch.batch['token_level_rewards'].sum(dim=-1)  # [batch_size]
+    uids = batch.non_tensor_batch['uid']
+    advantages = batch.batch['advantages']
+
+    beta = config.beta
+
+    # Group by UID
+    uid_to_indices = defaultdict(list)
+    for i, uid in enumerate(uids):
+        uid_to_indices[uid].append(i)
+
+    weights = torch.ones_like(rewards)
+    effective_betas = []
+
+    for uid, indices in uid_to_indices.items():
+        if len(indices) <= 1:
+            continue
+        idx_tensor = torch.tensor(indices, device=rewards.device)
+        group_rewards = rewards[idx_tensor]
+
+        effective_beta = beta
+        if config.adaptive:
+            effective_beta = _find_adaptive_beta(
+                group_rewards, config.target_gamma,
+                config.beta_min, config.beta_max
+            )
+        effective_betas.append(effective_beta)
+
+        # Softmax weighting: w_i = exp(beta * r_i) / sum(exp(beta * r_j))
+        log_weights = effective_beta * group_rewards
+        log_weights = log_weights - log_weights.max()  # numerical stability
+        w = torch.softmax(log_weights, dim=0)
+
+        # Scale so mean weight = 1 (preserves advantage magnitude)
+        w = w * len(indices)
+
+        weights[idx_tensor] = w
+
+    # Apply weights to advantages (broadcast across response length)
+    batch.batch['advantages'] = advantages * weights.unsqueeze(-1)
+
+    avg_beta = sum(effective_betas) / len(effective_betas) if effective_betas else beta
+    metrics = {
+        'entropic/weight_max': weights.max().item(),
+        'entropic/weight_min': weights.min().item(),
+        'entropic/weight_std': weights.std().item(),
+        'entropic/effective_beta': avg_beta,
+    }
+    return batch, metrics
 
 
 def compute_data_metrics(batch, use_critic=True, tokenizer=None):
@@ -1088,6 +1165,12 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
                                     lam=self.config.algorithm.lam,
                                     num_repeat=self.config.actor_rollout_ref.rollout.n,
                                     config=self.config.algorithm)
+
+            # Apply entropic (risk-seeking) reweighting to advantages
+            entropic_config = self.config.algorithm.get('entropic_objective', None)
+            if entropic_config is not None and entropic_config.get('enabled', False):
+                batch, entropic_metrics = apply_entropic_reweighting(batch, entropic_config)
+                metrics.update(entropic_metrics)
 
         gc.collect()
         return batch, metrics
