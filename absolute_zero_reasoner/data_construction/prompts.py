@@ -347,6 +347,16 @@ diversity: <0-5>
 interesting: <0-5>
 """
 
+conditioning_document_prompt = """
+### Inspiration Document:
+The following is an example programming problem and its solution. Use it as inspiration to create a new, different program that is similar in style and complexity. Do NOT copy it — create something original that explores a similar level of algorithmic reasoning.
+
+<inspiration>
+{conditioning_document}
+</inspiration>
+
+"""
+
 composite_requirements_prompt = "\n[IMPORTANT CRITERIA!!!] The main function `f` MUST make calls to ALL these functions {function_names} in its body, and you SHOULD NOT provide the definition of {function_names} in your output code snippet. The function `f` should build on top of {function_names} with extra functionalities, not just a simple wrapper. You should first reason step by step about what these functions, {function_names}, do, then write the code snippet.\n" + '\n### The Functions that Must ALL be Called in your Code Snippet: \n```python\n{composite_functions}\n```\n'
 
 remove_input_from_snippet_prompt = "- Do not have the test input anywhere in the code snippet, provide it in the input section."
@@ -362,6 +372,7 @@ def get_code_problem_generator_prompt(
     remove_after_return: bool = False,
     num_inputs: int = 10,
     remove_input_from_snippet: bool = False,
+    conditioning_document: str = None,
 ) -> str:
     # assert not (remove_after_return and not remove_input_from_snippet)
     composite_functions = list(composite_functions)
@@ -370,13 +381,16 @@ def get_code_problem_generator_prompt(
         output_key = 'output' if problem_type != 'code_e' else 'error'
         for i, snippet in enumerate(reference_snippets):
             snippet_string += f"<snippet_{i}>\n```python\n{snippet['snippet']}\n```\n```input\n{snippet['input']}\n```\n```{output_key}\n{snippet['output']}\n```\n</snippet_{i}>\n"
+    conditioning_string = ""
+    if conditioning_document and problem_type != 'code_f':
+        conditioning_string = conditioning_document_prompt.format(conditioning_document=conditioning_document)
     if problem_type == "code_i":
         return code_input_prompt.format(
             remove_after_return_prompt=(remove_singleton_variables_prompt if remove_after_return else '\n'),
             remove_input_from_snippet_prompt=(remove_input_from_snippet_prompt if remove_input_from_snippet else '')
         ).replace(
             '<|BANNED_KEYWORDS|>', ', '.join(banned_keywords)
-        ) + snippet_string + (
+        ) + conditioning_string + snippet_string + (
             composite_requirements_prompt.format(
                 function_names=', '.join([f'`g_{i}`' for i in range(len(composite_functions))]),
                 composite_functions="\n".join([d['snippet'] for d in composite_functions])
@@ -388,7 +402,7 @@ def get_code_problem_generator_prompt(
             remove_input_from_snippet_prompt=(remove_input_from_snippet_prompt if remove_input_from_snippet else '')
         ).replace(
             '<|BANNED_KEYWORDS|>', ', '.join(banned_keywords)
-        ) + snippet_string + (
+        ) + conditioning_string + snippet_string + (
             composite_requirements_prompt.format(
                 function_names=', '.join([f'`g_{i}`' for i in range(len(composite_functions))]),
                 composite_functions="\n".join([d['snippet'] for d in composite_functions])
@@ -410,7 +424,7 @@ def get_code_problem_generator_prompt(
             '<|BANNED_KEYWORDS|>', ', '.join(banned_keywords)
         ).replace(
             '<|BANNED_ASSERTION_KEYWORDS|>', assertion_keywords_string
-        ) + snippet_string + (
+        ) + conditioning_string + snippet_string + (
             composite_requirements_prompt.format(
                 function_names=', '.join([f'`g_{i}`' for i in range(len(composite_functions))]),
                 composite_functions="\n".join([d['snippet'] for d in composite_functions])

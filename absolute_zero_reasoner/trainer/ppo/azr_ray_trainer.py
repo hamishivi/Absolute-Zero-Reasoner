@@ -707,6 +707,9 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
         self.dataset_manager = DatasetManager.remote()
         self._last_cleanup_step = 0
         self._cleanup_frequency = self.config.azr.get('executor_cleanup_frequency', 5)
+        self._conditioning_documents = None
+        if self.config.azr.get('conditioning_dataset', None):
+            self._load_conditioning_dataset(self.config.azr.conditioning_dataset)
 
     def cleanup(self):
         """Clean up the executor and other resources"""
@@ -715,6 +718,18 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
             self._executor.cleanup()
         # Force garbage collection
         gc.collect()
+
+    def _load_conditioning_dataset(self, dataset_name: str):
+        """Load a HuggingFace dataset for conditioning generation prompts."""
+        from datasets import load_dataset
+        PrettyPrinter.status("CONDITIONING", f"Loading conditioning dataset: {dataset_name}", "info")
+        ds = load_dataset(dataset_name, split='train')
+        self._conditioning_documents = []
+        for row in ds:
+            if row.get('good_program', True):
+                doc = row['rewritten_input'] + "\n" + row['rewritten_solution']
+                self._conditioning_documents.append(doc)
+        PrettyPrinter.status("CONDITIONING", f"Loaded {len(self._conditioning_documents)} conditioning documents", "info")
 
     def _create_train_code_gen_dataloader(
         self,
@@ -779,6 +794,7 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
             'remove_after_return': self.config.azr.reward.generation_reward_config.remove_after_return,
             'remove_input_from_snippet': self.config.azr.reward.generation_reward_config.remove_input_from_snippet,
             'include_references': self.config.azr.reward.generation_reward_config.include_references,
+            'conditioning_documents': self._conditioning_documents,
         }
 
         # Add code_f specific parameters
