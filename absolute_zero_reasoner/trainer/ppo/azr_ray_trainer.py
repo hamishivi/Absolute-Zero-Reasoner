@@ -49,12 +49,12 @@ def create_default_dict():
     return defaultdict(int)
 
 
-def _find_adaptive_beta(group_rewards, target_gamma, beta_min, beta_max, n_iter=20):
+def _find_adaptive_beta(rewards, target_gamma, beta_min, beta_max, n_iter=20):
     """Binary search for beta that satisfies KL[q_beta || uniform] = target_gamma."""
+    n = len(rewards)
     for _ in range(n_iter):
         beta_mid = (beta_min + beta_max) / 2
-        w = torch.softmax(beta_mid * group_rewards, dim=0)
-        n = len(group_rewards)
+        w = torch.softmax(beta_mid * rewards, dim=0)
         kl = torch.sum(w * (torch.log(w + 1e-10) - math.log(1.0 / n)))
         if kl < target_gamma:
             beta_min = beta_mid
@@ -64,63 +64,45 @@ def _find_adaptive_beta(group_rewards, target_gamma, beta_min, beta_max, n_iter=
 
 
 def apply_entropic_reweighting(batch, config):
-    """Reweight advantages using entropic (risk-seeking) objective.
+    """Reweight advantages using batch-wide entropic (risk-seeking) objective.
 
-    Within each UID group, computes softmax weights w_i = exp(beta * R_i) / sum(exp(beta * R_j))
-    and scales advantages by w_i * group_size (so mean weight = 1, preserving scale).
-    With large beta, only the best sample in a group drives the gradient, making the
-    objective risk-seeking and preserving novel-but-risky algorithmic patterns.
+    Computes softmax weights w_i = exp(beta * R_i) / sum(exp(beta * R_j)) across the
+    entire batch and scales advantages by w_i * batch_size (so mean weight = 1,
+    preserving scale). This upweights high-reward samples (e.g. novel programs with
+    high diversity + accuracy rewards) and downweights low-reward ones, making the
+    objective risk-seeking. Works with n=1 (no need for multiple rollouts per prompt).
+
+    Based on TTT-Discover (arXiv 2601.16175), adapted for batch-wide operation
+    with REINFORCE++ instead of per-group operation with GRPO.
     """
     if not config.enabled:
         return batch, {}
 
     rewards = batch.batch['token_level_rewards'].sum(dim=-1)  # [batch_size]
-    uids = batch.non_tensor_batch['uid']
     advantages = batch.batch['advantages']
+    n = rewards.shape[0]
 
     beta = config.beta
+    if config.adaptive:
+        beta = _find_adaptive_beta(
+            rewards, config.target_gamma,
+            config.beta_min, config.beta_max
+        )
 
-    # Group by UID
-    uid_to_indices = defaultdict(list)
-    for i, uid in enumerate(uids):
-        uid_to_indices[uid].append(i)
+    # Batch-wide softmax weighting: w_i = exp(beta * r_i) / sum(exp(beta * r_j))
+    w = torch.softmax(beta * rewards, dim=0)
 
-    weights = torch.ones_like(rewards)
-    effective_betas = []
-
-    for uid, indices in uid_to_indices.items():
-        if len(indices) <= 1:
-            continue
-        idx_tensor = torch.tensor(indices, device=rewards.device)
-        group_rewards = rewards[idx_tensor]
-
-        effective_beta = beta
-        if config.adaptive:
-            effective_beta = _find_adaptive_beta(
-                group_rewards, config.target_gamma,
-                config.beta_min, config.beta_max
-            )
-        effective_betas.append(effective_beta)
-
-        # Softmax weighting: w_i = exp(beta * r_i) / sum(exp(beta * r_j))
-        log_weights = effective_beta * group_rewards
-        log_weights = log_weights - log_weights.max()  # numerical stability
-        w = torch.softmax(log_weights, dim=0)
-
-        # Scale so mean weight = 1 (preserves advantage magnitude)
-        w = w * len(indices)
-
-        weights[idx_tensor] = w
+    # Scale so mean weight = 1 (preserves advantage magnitude)
+    w = w * n
 
     # Apply weights to advantages (broadcast across response length)
-    batch.batch['advantages'] = advantages * weights.unsqueeze(-1)
+    batch.batch['advantages'] = advantages * w.unsqueeze(-1)
 
-    avg_beta = sum(effective_betas) / len(effective_betas) if effective_betas else beta
     metrics = {
-        'entropic/weight_max': weights.max().item(),
-        'entropic/weight_min': weights.min().item(),
-        'entropic/weight_std': weights.std().item(),
-        'entropic/effective_beta': avg_beta,
+        'entropic/weight_max': w.max().item(),
+        'entropic/weight_min': w.min().item(),
+        'entropic/weight_std': w.std().item(),
+        'entropic/effective_beta': beta,
     }
     return batch, metrics
 
@@ -994,10 +976,16 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
 
             # make sure actor_rollout_wg n > 1
             if problem_type.startswith('gen'):
-                # Sample buffer snippets for LM diversity reward (only for non-code_f gen tasks)
+                # Sample buffer snippets for diversity rewards (only for non-code_f gen tasks)
                 buffer_snippets = None
-                if 'code_f' not in problem_type and self.config.azr.reward.generation_reward_config.lm_diversity_reward.enabled:
-                    n_buffer_samples = self.config.azr.reward.generation_reward_config.lm_diversity_reward.n_buffer_samples
+                lm_diversity_enabled = self.config.azr.reward.generation_reward_config.lm_diversity_reward.enabled
+                neural_diversity_enabled = self.config.azr.reward.generation_reward_config.neural_diversity_reward.enabled
+                if 'code_f' not in problem_type and (lm_diversity_enabled or neural_diversity_enabled):
+                    if neural_diversity_enabled:
+                        # Neural diversity uses all buffer snippets since embedding is cheap
+                        n_buffer_samples = 10**9  # effectively all
+                    else:
+                        n_buffer_samples = self.config.azr.reward.generation_reward_config.lm_diversity_reward.n_buffer_samples
                     buffer_snippets = ray.get(self.dataset_manager.sample_snippets.remote(n_buffer_samples))
 
                 reward_fn_kwargs = {

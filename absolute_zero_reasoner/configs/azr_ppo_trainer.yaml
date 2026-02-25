@@ -614,3 +614,8 @@ azr:
         coef: 1.0
         max: 1.0
         n_buffer_samples: 5
+      neural_diversity_reward:
+        enabled: False
+        coef: 1.0
+        max: 1.0
+        model_name: microsoft/unixcoder-base
