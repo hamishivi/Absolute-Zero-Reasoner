@@ -506,6 +506,7 @@ azr:
   output_error_seed_path: null
   output_code_f_seed_path: null
   code_f_seed_dataset: null
+  conditioning_dataset: null  # HuggingFace dataset for conditioning generation prompts (e.g. saurabh5/llama-nemotron-rlvr-code-stdio)
   pretrain_pred_steps: -1
   executor: qwq # [qwq, sandboxfusion]
   ast_check: True

@@ -30,6 +30,7 @@ def get_gen_code_io_data(
     num_inputs: int = 10,
     remove_input_from_snippet: bool = False,
     include_references: bool = True,
+    conditioning_documents: List[str] = None,
 ):
     return_io_data = []
     if instruction_type.startswith('boxed'):
@@ -75,6 +76,9 @@ def get_gen_code_io_data(
                 imports = chosen_references[0]['imports']
             else:
                 imports = []
+        conditioning_document = None
+        if conditioning_documents:
+            conditioning_document = conditioning_documents[random.randint(0, len(conditioning_documents))]
         io_prompt = instruction_template.format(
             get_code_problem_generator_prompt(
                 problem_type=problem_type,
@@ -85,6 +89,7 @@ def get_gen_code_io_data(
                 remove_after_return=remove_after_return,
                 num_inputs=num_inputs,
                 remove_input_from_snippet=remove_input_from_snippet,
+                conditioning_document=conditioning_document,
             )
         )
         if len(tokenizer(io_prompt)['input_ids']) <= content_max_length:
