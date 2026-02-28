@@ -74,6 +74,7 @@ uv run python -m absolute_zero_reasoner.main_azr_ppo \
     azr.problem_types=['code_i','code_o','code_f'] \
     azr.data_selection_strategy.banned_keywords_for_errors_and_exceptions=['raise'] \
     azr.conditioning_dataset=saurabh5/llama-nemotron-rlvr-code-stdio \
+    azr.prompt_version=v2 \
     trainer.debug=False \
     azr.reward.generation_reward_config.complexity_reward.coef=0.0 \
     azr.reward.generation_reward_config.complexity_reward.max=0.0 \
@@ -92,9 +93,9 @@ uv run python -m absolute_zero_reasoner.main_azr_ppo \
     azr.reward.generation_reward_config.lm_diversity_reward.coef=0.0 \
     azr.reward.generation_reward_config.lm_diversity_reward.max=0.0 \
     azr.reward.generation_reward_config.lm_diversity_reward.n_buffer_samples=5 \
-    azr.reward.generation_reward_config.neural_diversity_reward.enabled=False \
-    azr.reward.generation_reward_config.neural_diversity_reward.coef=0.0 \
-    azr.reward.generation_reward_config.neural_diversity_reward.max=0.0 \
+    azr.reward.generation_reward_config.neural_diversity_reward.enabled=True \
+    azr.reward.generation_reward_config.neural_diversity_reward.coef=10.0 \
+    azr.reward.generation_reward_config.neural_diversity_reward.max=10.0 \
     azr.reward.generation_reward_config.neural_diversity_reward.model_name=microsoft/unixcoder-base \
     azr.pred_data_mix_strategy=max_new \
     azr.data_selection_strategy.seed_batch_factor=4 \

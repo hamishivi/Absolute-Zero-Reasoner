@@ -357,6 +357,217 @@ The following is an example programming problem and its solution. Use it as insp
 
 """
 
+conditioning_document_prompt_v2 = """
+### Inspiration Document:
+The following is an example programming problem and its solution. Use it as a STRONG source of inspiration for the algorithm category, data structures, and computational patterns in your new program. Your program should explore the SAME domain or algorithmic family as this document, but solve a different specific problem.
+
+Study the inspiration carefully:
+- What algorithm category does it use? Build on that category.
+- What data structures does it employ? Use similar or related structures.
+- What is the core computational pattern? Create a variation or extension of it.
+
+<inspiration>
+{conditioning_document}
+</inspiration>
+
+"""
+
+code_input_prompt_v2 = """
+## Task: Create a UNIQUE Python Code Snippet (where custom classes are allowed, which should be defined at the top of the code snippet) with one Matching Input
+
+Using the reference code snippets and inspiration document provided below, design a new and unique Python code snippet that demands deep algorithmic reasoning to deduce one possible input from a given output. Your submission should include both a code snippet and test input pair, where the input will be plugged into the code snippet to produce the output, which that function output be given to a test subject to come up with any input that will produce the same function output. This is meant to be an I.Q. test.
+
+### Step 1: Algorithm Category Selection
+FIRST, choose an algorithm category for your program. Draw inspiration from the provided inspiration document's domain.
+
+**Algorithm Categories** (select ONE):
+- String processing (parsing, pattern matching, encoding/decoding)
+- Graph algorithms (traversal, shortest path, connectivity)
+- Tree operations (BST, trie, segment tree, heap)
+- Dynamic programming (knapsack, LCS, edit distance, matrix chain)
+- Mathematical computation (number theory, combinatorics, geometry)
+- Bit manipulation and binary operations
+- Stack/queue-based algorithms (expression evaluation, monotonic stack)
+- Sorting and searching variants (custom comparators, k-th element)
+- Hash-based algorithms (frequency counting, anagram detection)
+- Recursive/backtracking (permutations, constraint satisfaction)
+- Matrix/grid operations (rotation, flood fill, game of life)
+- Linked list / custom data structure operations
+
+### Step 2: Diversity Planning
+Before writing code, explicitly state:
+1. What algorithm category did you choose and how does it connect to the inspiration document?
+2. How is your program STRUCTURALLY different from EACH reference snippet?
+3. What data types does your program use? (VARY from references)
+4. What is the core computational pattern? (Must differ from references)
+
+### Step 3: Complexity Design
+Design your program to have:
+- At least 2 non-trivial data transformations
+- State that evolves through multiple steps
+- A non-obvious relationship between input and output
+
+### Step 4: Code Generation
+### Code Requirements:
+- Name the entry function `f` (e.g., `def f(...): ...`), you can have nested definitions inside `f`
+- Ensure the function returns a value
+- Include at least one input parameter
+- Make the function deterministic
+- Make the snippet require state tracking across multiple data transformations, ensuring the task requires long multi step reasoning
+- AVOID THE FOLLOWING:
+  * Random functions or variables
+  * Date/time operations
+  * I/O operations (reading files, network requests)
+  * Printing or logging
+  * Any external state
+- Ensure execution completes within 10 seconds on a modern CPU
+- All imports and class definitions should be at the very top of the code snippet
+- The snippet should end with a return statement from the main function `f`, anything after will be removed
+{remove_input_from_snippet_prompt}{remove_after_return_prompt}
+### Input Requirements:
+- Provide exactly one test input for your function
+- Format multiple arguments with commas between them
+- Remember to add quotes around string arguments
+
+### Formatting:
+- Format your code with: ```python
+  def f(...):
+      # your code here
+      return ...
+  ```
+- Format your input with: ```input
+  arg1, arg2, ...
+  ```
+
+### Example Format:
+```python
+def f(name: str, info: dict):
+    # code logic here
+    return result
+```
+
+```input
+'John', {{'age': 20, 'city': 'New York'}}
+```
+
+### Step 5: Self-Check
+Verify your submission:
+- Is your function signature different from ALL reference snippets?
+- Does your program use different data types than the references?
+- Would someone looking at your code say it solves a DIFFERENT problem?
+- Is your input format different from the reference inputs?
+- Does your program draw genuine inspiration from the inspiration document's domain?
+
+If ANY answer is NO, go back to Step 1 and choose a different approach.
+
+### Evaluation Criteria:
+- Executability, your code should be executable given your input
+- Difficulty in predicting the output from your provided input and code snippet. Focus on either algorithmic reasoning or logic complexity. For example, you can define complex data structure classes and operate on them like trees, heaps, stacks, queues, graphs, etc, or use complex control flow, dynamic programming, recursions, divide and conquer, greedy, backtracking, etc
+- Creativity, the code needs to be sufficiently different from the provided reference snippets
+- Restricted usage of certain keywords and packages, you are not allowed to use the following words in any form, even in comments: <|BANNED_KEYWORDS|>
+
+### Reference Code Snippets:
+"""
+
+code_output_prompt_v2 = """
+## Task: Create a UNIQUE Python Code Snippet (where custom classes are allowed, which should be defined at the top of the code snippet) with one Matching Input
+
+Using the reference code snippets and inspiration document provided below, design a new and unique Python code snippet that demands deep algorithmic reasoning to deduce the output from the input. Your submission should include a code snippet and a test input pair, where the input will be plugged into the code snippet to produce the output. The input will be given to a test subject to deduce the output, which is meant to be an I.Q. test.
+
+### Step 1: Algorithm Category Selection
+FIRST, choose an algorithm category for your program. Draw inspiration from the provided inspiration document's domain.
+
+**Algorithm Categories** (select ONE):
+- String processing (parsing, pattern matching, encoding/decoding)
+- Graph algorithms (traversal, shortest path, connectivity)
+- Tree operations (BST, trie, segment tree, heap)
+- Dynamic programming (knapsack, LCS, edit distance, matrix chain)
+- Mathematical computation (number theory, combinatorics, geometry)
+- Bit manipulation and binary operations
+- Stack/queue-based algorithms (expression evaluation, monotonic stack)
+- Sorting and searching variants (custom comparators, k-th element)
+- Hash-based algorithms (frequency counting, anagram detection)
+- Recursive/backtracking (permutations, constraint satisfaction)
+- Matrix/grid operations (rotation, flood fill, game of life)
+- Linked list / custom data structure operations
+
+### Step 2: Diversity Planning
+Before writing code, explicitly state:
+1. What algorithm category did you choose and how does it connect to the inspiration document?
+2. How is your program STRUCTURALLY different from EACH reference snippet?
+3. What data types does your program use? (VARY from references)
+4. What is the core computational pattern? (Must differ from references)
+
+### Step 3: Complexity Design
+Design your program to have:
+- At least 2 non-trivial data transformations
+- State that evolves through multiple steps
+- A non-obvious relationship between input and output
+
+### Step 4: Code Generation
+### Code Requirements:
+- Name the entry function `f` (e.g., `def f(...): ...`), you can have nested definitions inside `f`
+- Ensure the function returns a value
+- Include at least one input parameter
+- Make the function deterministic
+- Make the snippet require state tracking across multiple data transformations, ensuring the task requires long multi step reasoning
+- AVOID THE FOLLOWING:
+  * Random functions or variables
+  * Date/time operations
+  * I/O operations (reading files, network requests)
+  * Printing or logging
+  * Any external state
+- Ensure execution completes within 10 seconds on a modern CPU
+- All imports and class definitions should be at the very top of the code snippet
+- The snippet should end with a return statement from the main function `f`, anything after will be removed
+{remove_input_from_snippet_prompt}{remove_after_return_prompt}
+### Input Requirements:
+- Provide exactly one test input for your function
+- Format multiple arguments with commas between them
+- Remember to add quotes around string arguments
+
+### Formatting:
+- Format your code with:
+```python
+def f(...):
+    # your code here
+    return ...
+```
+- Format your input with:
+```input
+arg1, arg2, ...
+```
+
+### Example Format:
+```python
+def f(name: str, info: dict):
+    # code logic here
+    return result
+```
+
+```input
+'John', {{'age': 20, 'city': 'New York'}}
+```
+
+### Step 5: Self-Check
+Verify your submission:
+- Is your function signature different from ALL reference snippets?
+- Does your program use different data types than the references?
+- Would someone looking at your code say it solves a DIFFERENT problem?
+- Is your input format different from the reference inputs?
+- Does your program draw genuine inspiration from the inspiration document's domain?
+
+If ANY answer is NO, go back to Step 1 and choose a different approach.
+
+### Evaluation Criteria:
+- Executability, your code should be executable given your input
+- Difficulty in predicting your ```input``` from 1) your ```python``` code and 2) the deterministic ```output``` that will be obtained from your ```input```. Focus on either algorithmic reasoning or logic complexity. For example, you can define complex data structure classes and operate on them like trees, heaps, stacks, queues, graphs, etc, or use complex control flow, dynamic programming, recursions, divide and conquer, greedy, backtracking, etc
+- Creativity, the code needs to be sufficiently different from the provided reference snippets
+- Restricted usage of certain keywords and packages, you are not allowed to use the following words in any form, even in comments: <|BANNED_KEYWORDS|>
+
+### Reference Code Snippets:
+"""
+
 composite_requirements_prompt = "\n[IMPORTANT CRITERIA!!!] The main function `f` MUST make calls to ALL these functions {function_names} in its body, and you SHOULD NOT provide the definition of {function_names} in your output code snippet. The function `f` should build on top of {function_names} with extra functionalities, not just a simple wrapper. You should first reason step by step about what these functions, {function_names}, do, then write the code snippet.\n" + '\n### The Functions that Must ALL be Called in your Code Snippet: \n```python\n{composite_functions}\n```\n'
 
 remove_input_from_snippet_prompt = "- Do not have the test input anywhere in the code snippet, provide it in the input section."
@@ -373,6 +584,7 @@ def get_code_problem_generator_prompt(
     num_inputs: int = 10,
     remove_input_from_snippet: bool = False,
     conditioning_document: str = None,
+    prompt_version: str = "v1",
 ) -> str:
     # assert not (remove_after_return and not remove_input_from_snippet)
     composite_functions = list(composite_functions)
@@ -383,9 +595,17 @@ def get_code_problem_generator_prompt(
             snippet_string += f"<snippet_{i}>\n```python\n{snippet['snippet']}\n```\n```input\n{snippet['input']}\n```\n```{output_key}\n{snippet['output']}\n```\n</snippet_{i}>\n"
     conditioning_string = ""
     if conditioning_document and problem_type != 'code_f':
-        conditioning_string = conditioning_document_prompt.format(conditioning_document=conditioning_document)
+        cond_template = conditioning_document_prompt_v2 if prompt_version == "v2" else conditioning_document_prompt
+        conditioning_string = cond_template.format(conditioning_document=conditioning_document)
+    # Select prompt templates based on version
+    if prompt_version == "v2":
+        _code_input_prompt = code_input_prompt_v2
+        _code_output_prompt = code_output_prompt_v2
+    else:
+        _code_input_prompt = code_input_prompt
+        _code_output_prompt = code_output_prompt
     if problem_type == "code_i":
-        return code_input_prompt.format(
+        return _code_input_prompt.format(
             remove_after_return_prompt=(remove_singleton_variables_prompt if remove_after_return else '\n'),
             remove_input_from_snippet_prompt=(remove_input_from_snippet_prompt if remove_input_from_snippet else '')
         ).replace(
@@ -397,7 +617,7 @@ def get_code_problem_generator_prompt(
             ) if composite_functions else '\n'
         )
     elif problem_type == "code_o":
-        return code_output_prompt.format(
+        return _code_output_prompt.format(
             remove_after_return_prompt=(remove_singleton_variables_prompt if remove_after_return else '\n'),
             remove_input_from_snippet_prompt=(remove_input_from_snippet_prompt if remove_input_from_snippet else '')
         ).replace(

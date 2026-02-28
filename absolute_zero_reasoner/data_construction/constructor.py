@@ -31,6 +31,7 @@ def get_gen_code_io_data(
     remove_input_from_snippet: bool = False,
     include_references: bool = True,
     conditioning_documents: List[str] = None,
+    prompt_version: str = "v1",
 ):
     return_io_data = []
     if instruction_type.startswith('boxed'):
@@ -90,6 +91,7 @@ def get_gen_code_io_data(
                 num_inputs=num_inputs,
                 remove_input_from_snippet=remove_input_from_snippet,
                 conditioning_document=conditioning_document,
+                prompt_version=prompt_version,
             )
         )
         if len(tokenizer(io_prompt)['input_ids']) <= content_max_length:

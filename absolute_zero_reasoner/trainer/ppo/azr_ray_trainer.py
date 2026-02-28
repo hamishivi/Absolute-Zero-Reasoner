@@ -777,6 +777,7 @@ class CodeIORayPPOTrainer(ReasonRLRayPPOTrainer):
             'remove_input_from_snippet': self.config.azr.reward.generation_reward_config.remove_input_from_snippet,
             'include_references': self.config.azr.reward.generation_reward_config.include_references,
             'conditioning_documents': self._conditioning_documents,
+            'prompt_version': self.config.azr.get('prompt_version', 'v1'),
         }
 
         # Add code_f specific parameters
